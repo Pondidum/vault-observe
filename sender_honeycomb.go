@@ -7,24 +7,16 @@ import (
 	libhoney "github.com/honeycombio/libhoney-go"
 )
 
-type HoneycombSender struct {
-	apikey string
-}
+type HoneycombSender struct{}
 
 func NewHoneycombSender(apikey string) *HoneycombSender {
-	return &HoneycombSender{
-		apikey: apikey,
-	}
-}
-
-func (h *HoneycombSender) Init() error {
 
 	libhoney.Init(libhoney.Config{
-		WriteKey: h.apikey,
+		WriteKey: apikey,
 		Dataset:  "vault-observe",
 	})
 
-	return nil
+	return &HoneycombSender{}
 }
 
 func (h *HoneycombSender) Send(typed Event, event map[string]interface{}) error {
@@ -47,6 +39,11 @@ func (h *HoneycombSender) Send(typed Event, event map[string]interface{}) error 
 	}
 
 	ev.Send()
+	return nil
+}
+
+func (h *HoneycombSender) Shutdown() error {
+	libhoney.Close()
 	return nil
 }
 

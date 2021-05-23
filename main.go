@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/jeremywohl/flatten"
 	"github.com/mitchellh/mapstructure"
@@ -44,14 +46,16 @@ func run(args []string) error {
 	if *useHoneycomb {
 		fmt.Println("Sending events to Honeycomb")
 		honey := NewHoneycombSender(os.Getenv("HONEYCOMB_API_KEY"))
-		honey.Init()
 		senders = append(senders, honey)
 	}
 
 	if *useZipkin {
 		fmt.Println("Sending events to Zipkin")
-		otel := NewOtelSender()
-		otel.Init()
+		otel, err := NewOtelSender()
+		if err != nil {
+			return err
+		}
+
 		senders = append(senders, otel)
 	}
 
@@ -64,6 +68,10 @@ func run(args []string) error {
 		return fmt.Errorf("No senders specified!")
 	}
 
+	sender := NewCompositeSender(senders)
+
+	handleSignals(sender)
+
 	os.Remove(*socketPath)
 	ln, err := net.Listen("unix", *socketPath)
 	if err != nil {
@@ -74,8 +82,6 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-
-	sender := NewCompositeSender(senders)
 
 	for {
 		err := processMessage(conn, sender)
@@ -115,8 +121,24 @@ func processMessage(conn net.Conn, sender Sender) error {
 	return nil
 }
 
+func handleSignals(sender Sender) {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		s := <-signals
+		fmt.Printf("Recieved %s, stopping\n", s)
+		if err := sender.Shutdown(); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		os.Exit(0)
+	}()
+}
+
 type Sender interface {
 	Send(Event, map[string]interface{}) error
+	Shutdown() error
 }
 
 type Event struct {

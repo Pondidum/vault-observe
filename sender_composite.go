@@ -32,3 +32,24 @@ func (c *CompositeSender) Send(typed Event, event map[string]interface{}) error 
 
 	return nil
 }
+
+func (c *CompositeSender) Shutdown() error {
+	errors := []string{}
+
+	for _, sender := range c.senders {
+		if err := sender.Shutdown(); err != nil {
+			errors = append(errors, err.Error())
+		}
+	}
+
+	if len(errors) == 1 {
+		return fmt.Errorf(errors[0])
+	}
+
+	if len(errors) > 1 {
+		return fmt.Errorf("Errors:\n\n%s", strings.Join(errors, "\n"))
+	}
+
+	return nil
+
+}

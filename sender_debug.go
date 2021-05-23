@@ -18,3 +18,7 @@ func (c *DebugSender) Send(typed Event, event map[string]interface{}) error {
 
 	return nil
 }
+
+func (h *DebugSender) Shutdown() error {
+	return nil
+}

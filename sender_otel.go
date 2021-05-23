@@ -20,20 +20,16 @@ import (
 )
 
 type OtelSender struct {
+	tp *sdktrace.TracerProvider
 }
 
-func NewOtelSender() *OtelSender {
-	return &OtelSender{}
-}
-
-func (o *OtelSender) Init() error {
-
+func NewOtelSender() (*OtelSender, error) {
 	exporter, err := zipkin.NewRawExporter(
 		"http://localhost:9411/api/v2/spans",
 		zipkin.WithSDKOptions(sdktrace.WithSampler(sdktrace.AlwaysSample())),
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	processor := sdktrace.NewSimpleSpanProcessor(exporter)
@@ -46,8 +42,7 @@ func (o *OtelSender) Init() error {
 	)
 	otel.SetTracerProvider(tp)
 
-	//_ = tp.Shutdown(context.Background())
-	return nil
+	return &OtelSender{tp: tp}, nil
 }
 
 func (o *OtelSender) Send(typed Event, event map[string]interface{}) error {
@@ -74,6 +69,10 @@ func (o *OtelSender) Send(typed Event, event map[string]interface{}) error {
 
 	span.End()
 	return nil
+}
+
+func (o *OtelSender) Shutdown() error {
+	return o.tp.Shutdown(context.Background())
 }
 
 type Generator struct {
