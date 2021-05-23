@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  vault:
+    image: vault:latest
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - "./:/sockets:rw"
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "vault"
+  zipkin:
+    image: openzipkin/zipkin-slim
+    ports:
+      - "9411:9411"
