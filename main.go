@@ -26,8 +26,7 @@ func main() {
 
 func run(args []string) error {
 
-	flags := pflag.NewFlagSet("vault-observe", pflag.ExitOnError)
-
+	flags := pflag.NewFlagSet("vault-observe", pflag.ContinueOnError)
 	useHoneycomb := flags.Bool("honeycomb", false, "enable sending to honeycomb")
 	useZipkin := flags.Bool("zipkin", false, "enable sending to zipkin")
 	useDebug := flags.Bool("debug", false, "enable sending to stdout")
@@ -35,6 +34,9 @@ func run(args []string) error {
 	socketPath := flags.String("socket-path", "/tmp/vault-observe.sock", "the unix socket path for vault to send audit events to")
 
 	if err := flags.Parse(args); err != nil {
+		if err == pflag.ErrHelp {
+			return nil
+		}
 		return err
 	}
 
