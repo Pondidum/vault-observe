@@ -4,10 +4,13 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 
-	libhoney "github.com/honeycombio/libhoney-go"
+	"github.com/jeremywohl/flatten"
+	"github.com/mitchellh/mapstructure"
+	"github.com/spf13/pflag"
 )
 
 func main() {
@@ -23,67 +26,104 @@ func main() {
 
 func run(args []string) error {
 
-	err := libhoney.Init(libhoney.Config{
-		APIKey:  os.Getenv("HONEYCOMB_API_KEY"),
-		Dataset: "vault-observe",
-	})
-	if err != nil {
+	flags := pflag.NewFlagSet("vault-observe", pflag.ExitOnError)
+
+	useHoneycomb := flags.Bool("honeycomb", false, "enable sending to honeycomb")
+	useZipkin := flags.Bool("zipkin", false, "enable sending to zipkin")
+	useDebug := flags.Bool("debug", false, "enable sending to stdout")
+
+	socketPath := flags.String("socket-path", "/tmp/vault-observe.sock", "the unix socket path for vault to send audit events to")
+
+	if err := flags.Parse(args); err != nil {
 		return err
 	}
 
-	ln, err := net.Listen("unix", "/tmp/audit.sock")
+	senders := []Sender{}
+	if *useHoneycomb {
+		fmt.Println("Sending events to Honeycomb")
+		honey := NewHoneycombSender(os.Getenv("HONEYCOMB_API_KEY"))
+		honey.Init()
+		senders = append(senders, honey)
+	}
+
+	if *useZipkin {
+		fmt.Println("Sending events to Zipkin")
+		otel := NewOtelSender()
+		otel.Init()
+		senders = append(senders, otel)
+	}
+
+	if *useDebug {
+		fmt.Println("Sending events to stdout")
+		senders = append(senders, NewDebugSender())
+	}
+
+	if len(senders) == 0 {
+		return fmt.Errorf("No senders specified!")
+	}
+
+	os.Remove(*socketPath)
+	ln, err := net.Listen("unix", *socketPath)
 	if err != nil {
 		return err
 	}
-
+	fmt.Println("Started listening to socket...")
 	conn, err := ln.Accept()
 	if err != nil {
 		return err
 	}
 
+	sender := NewCompositeSender(senders)
+
 	for {
-		message, err := bufio.NewReader(conn).ReadBytes('\n')
-		if err != nil {
-			return err
+		err := processMessage(conn, sender)
+
+		if err != nil && err != io.EOF {
+			fmt.Println(err)
 		}
-
-		partial := map[string]interface{}{}
-		if err := json.Unmarshal(message, &partial); err != nil {
-			return err
-		}
-
-		ev := libhoney.NewEvent()
-		ev.Add(partial)
-		if err := ev.Send(); err != nil {
-			return err
-		}
-
-		// picker := EventPicker{}
-		// if err := mapstructure.Decode(partial, &picker); err != nil {
-		// 	return err
-		// }
-
-		// if picker.Type == "request" {
-		// 	entry := audit.AuditRequestEntry{}
-		// 	if err := mapstructure.Decode(partial, &entry); err != nil {
-		// 		return err
-		// 	}
-
-		// }
-
-		// if picker.Type == "response" {
-		// 	entry := audit.AuditResponseEntry{}
-		// 	if err := mapstructure.Decode(partial, &entry); err != nil {
-		// 		fmt.Println(err)
-		// 		return 1
-		// 	}
-		// }
-		// // fmt.Println("Got " + picker.Type)
-
 	}
 
 }
 
-type EventPicker struct {
-	Type string
+func processMessage(conn net.Conn, sender Sender) error {
+	message, err := bufio.NewReader(conn).ReadBytes('\n')
+	if err != nil {
+		return err
+	}
+
+	event := map[string]interface{}{}
+	if err := json.Unmarshal(message, &event); err != nil {
+		return err
+	}
+
+	typed := Event{}
+	if err := mapstructure.Decode(event, &typed); err != nil {
+		return err
+	}
+
+	flat, err := flatten.Flatten(event, "", flatten.DotStyle)
+	if err != nil {
+		return err
+	}
+
+	if err := sender.Send(typed, flat); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type Sender interface {
+	Send(Event, map[string]interface{}) error
+}
+
+type Event struct {
+	Type  string
+	Error string
+
+	Request Request
+}
+
+type Request struct {
+	ID string
 }
