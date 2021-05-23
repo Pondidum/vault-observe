@@ -31,7 +31,7 @@ func run(args []string) error {
 	useZipkin := flags.Bool("zipkin", false, "enable sending to zipkin")
 	useDebug := flags.Bool("debug", false, "enable sending to stdout")
 
-	socketPath := flags.String("socket-path", "/tmp/vault-observe.sock", "the unix socket path for vault to send audit events to")
+	socketPath := flags.String("socket-path", "observe.sock", "the unix socket path for vault to send audit events to")
 
 	if err := flags.Parse(args); err != nil {
 		if err == pflag.ErrHelp {
