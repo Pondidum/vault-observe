@@ -54,7 +54,7 @@ func (o *OtelSender) Send(typed Event, event map[string]interface{}) error {
 	ctx := context.WithValue(context.Background(), "request_id", id)
 
 	tr := otel.GetTracerProvider().Tracer("main")
-	ctx, span := tr.Start(ctx, typed.Type, trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := tr.Start(ctx, typed.Type, trace.WithSpanKind(trace.SpanKindServer), trace.WithTimestamp(typed.StartTime))
 
 	for key, value := range event {
 		span.SetAttributes(attribute.KeyValue{
@@ -67,7 +67,7 @@ func (o *OtelSender) Send(typed Event, event map[string]interface{}) error {
 		span.SetStatus(codes.Error, typed.Error)
 	}
 
-	span.End()
+	span.End(trace.WithTimestamp(typed.Time))
 	return nil
 }
 
