@@ -21,18 +21,16 @@ func NewHoneycombSender(apikey string) *HoneycombSender {
 
 func (h *HoneycombSender) Send(typed Event, event map[string]interface{}) error {
 
-	ev := libhoney.NewEvent()
-	ev.AddField("trace.trace_id", typed.Request.ID)
+	duration := typed.Time.Sub(typed.StartTime).Milliseconds()
 
-	if typed.Type == "request" {
-		ev.AddField("trace.span_id", typed.Request.ID)
-	} else {
-		ev.AddField("trace.parent_id", typed.Request.ID)
-		ev.AddField("trace.span_id", generateSpanID())
-	}
+	ev := libhoney.NewEvent()
+	ev.Timestamp = typed.StartTime
+	ev.AddField("duration_ms", duration)
+	ev.AddField("trace.trace_id", typed.Request.ID)
+	ev.AddField("trace.span_id", typed.Request.ID)
 
 	ev.AddField("service_name", "vault")
-	ev.AddField("name", typed.Type)
+	ev.AddField("name", fmt.Sprintf("%s %s", typed.Request.Operation, typed.Request.Path))
 
 	for key, val := range event {
 		ev.AddField(key, val)

@@ -5,12 +5,20 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Sender: Honeycomb",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["--honeycomb"]
+    },
+    {
       "name": "Sender: Debug",
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}",
-      "args": ["--socket-path", "observe.sock", "--debug"]
+      "args": ["--debug"]
     },
     {
       "name": "Help",

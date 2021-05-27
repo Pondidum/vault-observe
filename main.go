@@ -9,9 +9,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/jeremywohl/flatten"
 	"github.com/mitchellh/mapstructure"
+	cache "github.com/patrickmn/go-cache"
 	"github.com/spf13/pflag"
 )
 
@@ -83,8 +85,10 @@ func run(args []string) error {
 		return err
 	}
 
+	requests := cache.New(10*time.Second, 1*time.Minute)
+
 	for {
-		err := processMessage(conn, sender)
+		err := processMessage(requests, conn, sender)
 
 		if err != nil && err != io.EOF {
 			fmt.Println(err)
@@ -93,7 +97,7 @@ func run(args []string) error {
 
 }
 
-func processMessage(conn net.Conn, sender Sender) error {
+func processMessage(requests *cache.Cache, conn net.Conn, sender Sender) error {
 	message, err := bufio.NewReader(conn).ReadBytes('\n')
 	if err != nil {
 		return err
@@ -105,17 +109,41 @@ func processMessage(conn net.Conn, sender Sender) error {
 	}
 
 	typed := Event{}
-	if err := mapstructure.Decode(event, &typed); err != nil {
-		return err
-	}
 
-	flat, err := flatten.Flatten(event, "", flatten.DotStyle)
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		DecodeHook: mapstructure.StringToTimeHookFunc(time.RFC3339Nano),
+		Result:     &typed,
+	})
 	if err != nil {
 		return err
 	}
 
-	if err := sender.Send(typed, flat); err != nil {
+	if err := decoder.Decode(event); err != nil {
 		return err
+	}
+
+	if typed.Type == "request" {
+		requests.Set(typed.Request.ID, typed.Time, cache.DefaultExpiration)
+		return nil
+	}
+
+	if typed.Type == "response" {
+
+		if x, found := requests.Get(typed.Request.ID); found {
+			typed.StartTime = x.(time.Time)
+			requests.Delete(typed.Request.ID)
+		} else {
+			return fmt.Errorf("No request found in the cache for %s", typed.Request.ID)
+		}
+
+		flat, err := flatten.Flatten(event, "", flatten.DotStyle)
+		if err != nil {
+			return err
+		}
+
+		if err := sender.Send(typed, flat); err != nil {
+			return err
+		}
 	}
 
 	return nil

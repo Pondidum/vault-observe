@@ -9,6 +9,7 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mitchellh/mapstructure v1.4.1
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
+	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/spf13/pflag v1.0.5
 	go.opentelemetry.io/otel v0.19.0
 	go.opentelemetry.io/otel/exporters/trace/zipkin v0.19.0
